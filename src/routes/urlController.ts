@@ -17,7 +17,7 @@ interface ShortenRequest {
 
 const routesController: RouteController = {
     setupRoutes(app) {
-        app.post("/shorten", async (req: Request, res: Response) => {
+        app.post("/api/v1/shorten", async (req: Request, res: Response) => {
             // Check if the request is valid
             if (!req.body) {
                 logger.error("No body provided");
@@ -93,11 +93,127 @@ const routesController: RouteController = {
 
             // Create the URL
             const url = new URL(parsedBody.url, id, 0, account);
-            await urlRepository.save(url);
+            const result = await urlRepository.save(url);
+            if (!result) {
+                logger.error("Internal Server Error");
+                res.status(500).send("Internal Server Error");
+                return;
+            }
 
             res.status(200).send({
                 id: url.shortId,
             });
+        });
+
+        app.get("/api/v1/stats/:id", async (req: Request, res: Response) => {
+            let id = req.params.id;
+            if (!id) {
+                res.status(400).send("Bad Request");
+                return;
+            }
+
+            let bearer = req.headers["authorization"];
+            if (!bearer) {
+                res.status(401).send("Unauthorized");
+                return;
+            }
+
+            // Parse the bearer token
+            let token = bearer.split(" ")[1];
+            if (!token) {
+                res.status(401).send("Unauthorized");
+                return;
+            }
+
+            // Check if the user has an account
+            const accountRepository = db.getRepository(Account);
+
+            let account = await accountRepository.findOneBy({
+                apiKey: token,
+            });
+
+            if (!account) {
+                logger.error("Unauthorized");
+                res.status(401).send("Unauthorized");
+                return;
+            }
+
+            const urlRepository = db.getRepository(URL);
+
+            const url = await urlRepository.findOneBy({
+                shortId: id,
+                account: { id: account.id },
+                deletedAt: undefined,
+            });
+
+            if (!url) {
+                logger.error("URL to get stats for was not Found");
+                res.status(404).send("Not Found");
+                return;
+            }
+
+            res.status(200).send({
+                views: url.views,
+            });
+        });
+
+        app.post("/api/v1/delete/:id", async (req: Request, res: Response) => {
+            let id = req.params.id;
+            if (!id) {
+                res.status(400).send("Bad Request");
+                return;
+            }
+
+            let bearer = req.headers["authorization"];
+            if (!bearer) {
+                res.status(401).send("Unauthorized");
+                return;
+            }
+
+            // Parse the bearer token
+            let token = bearer.split(" ")[1];
+            if (!token) {
+                res.status(401).send("Unauthorized");
+                return;
+            }
+
+            // Check if the user has an account
+            const accountRepository = db.getRepository(Account);
+
+            let account = await accountRepository.findOneBy({
+                apiKey: token,
+            });
+
+            if (!account) {
+                logger.error("Unauthorized");
+                res.status(401).send("Unauthorized");
+                return;
+            }
+
+            logger.info(`Looking for url with ${id} to delete...`);
+
+            const urlRepository = db.getRepository(URL);
+
+            const url = await urlRepository.findOneBy({
+                shortId: id,
+                account: { id: account.id },
+                deletedAt: undefined,
+            });
+
+            if (!url) {
+                logger.error("URL to delete was not Found");
+                res.status(404).send("Not Found");
+                return;
+            }
+
+            let result = await urlRepository.delete(url);
+            if (result.affected && result.affected > 0) {
+                logger.error("Internal Server Error");
+                res.status(500).send("Internal Server Error");
+                return;
+            }
+
+            res.status(200).send("OK");
         });
 
         app.get("/:id", async (req: Request, res: Response) => {
@@ -107,17 +223,23 @@ const routesController: RouteController = {
                 return;
             }
 
+            logger.info(`Looking for url with ${id}`);
+
             const urlRepository = db.getRepository(URL);
 
             const url = await urlRepository.findOneBy({
                 // @ts-ignore
                 shortId: id,
+                deletedAt: undefined,
             });
 
             if (!url) {
+                logger.error("Not Found");
                 res.status(404).send("Not Found");
                 return;
             }
+
+            logger.info(`Found url with ${id}, redirecting user...`);
 
             url.views++;
 
