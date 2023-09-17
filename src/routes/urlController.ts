@@ -143,7 +143,6 @@ const routesController: RouteController = {
             const url = await urlRepository.findOneBy({
                 shortId: id,
                 account: { id: account.id },
-                deletedAt: undefined,
             });
 
             if (!url) {
@@ -197,7 +196,6 @@ const routesController: RouteController = {
             const url = await urlRepository.findOneBy({
                 shortId: id,
                 account: { id: account.id },
-                deletedAt: undefined,
             });
 
             if (!url) {
@@ -206,8 +204,8 @@ const routesController: RouteController = {
                 return;
             }
 
-            let result = await urlRepository.delete(url);
-            if (result.affected && result.affected > 0) {
+            let result = await urlRepository.remove(url);
+            if (!result) {
                 logger.error("Internal Server Error");
                 res.status(500).send("Internal Server Error");
                 return;
@@ -230,7 +228,6 @@ const routesController: RouteController = {
             const url = await urlRepository.findOneBy({
                 // @ts-ignore
                 shortId: id,
-                deletedAt: undefined,
             });
 
             if (!url) {

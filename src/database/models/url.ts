@@ -39,10 +39,6 @@ export class URL {
     // @ts-ignore
     updatedAt: Date; // Last updated date
 
-    @DeleteDateColumn({ name: "deleted_at" })
-    // @ts-ignore
-    deletedAt: Date; // Deletion date
-
     constructor(
         redirectURL: string,
         shortId: string,

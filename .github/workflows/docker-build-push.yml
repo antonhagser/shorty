@@ -1,0 +1,50 @@
+name: Build and Push Docker Image
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v2
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v1
+
+            - name: Login to Harbor Registry
+              uses: docker/login-action@v1
+              with:
+                  registry: harbor.antonhagser.se
+                  username: ${{ secrets.HARBOR_USERNAME }}
+                  password: ${{ secrets.HARBOR_PASSWORD }}
+
+            - name: Build and push
+              uses: docker/build-push-action@v2
+              with:
+                  context: ./
+                  file: ./Dockerfile
+                  push: true
+                  tags: harbor.antonhagser.se/library/shorty:${{ github.sha }}
+
+            - name: Clone manifests repository
+              run: |
+                  git clone https://${{ secrets.MANIFESTS_PAT }}@github.com/antonhagser/manifests.git
+                  cd manifests
+
+            - name: Update Kubernetes manifest
+              run: |
+                  sed -i "s|harbor.antonhagser.se/library/shorty:.*|harbor.antonhagser.se/library/shorty:${GITHUB_SHA}|g" manifests/projects/shorty/deployment.yml
+
+            - name: Commit and push updated manifest
+              run: |
+                  cd manifests
+                  git config user.name "GitHub Actions"
+                  git config user.email "actions@github.com"
+                  git add projects/shorty/deployment.yml
+                  git commit -m "Update image tag to ${GITHUB_SHA}"
+                  git push https://${{ secrets.MANIFESTS_PAT }}@github.com/antonhagser/manifests.git
