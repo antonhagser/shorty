@@ -93,7 +93,7 @@ const routesController: RouteController = {
 
             // Create the URL
             const url = new URL(parsedBody.url, id, 0, account);
-            const result = await urlRepository.save(url);
+            const result = await urlRepository.insert(url);
             if (!result) {
                 logger.error("Internal Server Error");
                 res.status(500).send("Internal Server Error");

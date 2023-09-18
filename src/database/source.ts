@@ -14,6 +14,7 @@ const AppDataSource = new DataSource({
     entities: [Account, URL],
     subscribers: [],
     migrations: [],
+    poolSize: 5,
 });
 
 // Singleton database connection
