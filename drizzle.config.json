@@ -1,0 +1,5 @@
+{
+    "schema": "./src/db/schema",
+    "out": "./drizzle",
+    "driver": "pg"
+}

@@ -1,6 +1,6 @@
 import express from "express";
 
-import URLRouteController from "./routes/urlController";
+import URLRouteController from "./routes/url";
 
 export function initHTTPServer({ port }: { port: number }) {
     const app = express();
@@ -21,8 +21,6 @@ export function initHTTPServer({ port }: { port: number }) {
 }
 
 export type App = express.Express;
-export type Request = express.Request;
-export type Response = express.Response;
 
 export interface RouteController {
     setupRoutes(app: App): void;

@@ -9,11 +9,7 @@ Deploy with docker or kubernetes, port 3000.
 ### Environment variables
 
 - `DEFAULT_ADMIN_API_KEY`: The API key of the admin account created automatically.
-- `DB_HOST`: The database host.
-- `DB_PORT`: The database port.
-- `DB_USER`: The database user.
-- `DB_PASSWORD`: The database password.
-- `DB_NAME`: The database name.
+- `DATABASE_URL`: The database url.
 
 Accounts are currently created manually in the database. The first account created automatically will be the admin account which has its API key specified in the `DEFAULT_ADMIN_API_KEY` environment variable.
 

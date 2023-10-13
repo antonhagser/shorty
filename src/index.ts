@@ -1,6 +1,7 @@
-import { Account } from "./database/models/account";
-import { db } from "./database/source";
-import { initHTTPServer } from "./httpserver";
+import { migrate } from "./db/connect";
+import { dbCreateAccount, dbGetAccountById } from "./db/models/accounts";
+import { NewAccount } from "./db/schema/accounts";
+import { initHTTPServer } from "./http";
 import { createCustomLogger } from "./logger";
 
 // Winston logger
@@ -12,35 +13,40 @@ async function main() {
     logger.log("info", "Starting HTTP server on port 3000");
 
     try {
-        await db.initialize();
+        // Migrate the database
+        await migrate();
     } catch (e) {
         logger.log("error", "Failed to initialize database", e);
         process.exit(1);
     }
 
-    if (accountsEnabled) {
-        logger.log("info", "Accounts are enabled");
-    } else {
-        logger.log("info", "Accounts are disabled");
+    logger.log(
+        "info",
+        "Accounts are ",
+        accountsEnabled ? "enabled" : "disabled"
+    );
 
-        // Check if default account exists
-        let accountRepo = db.getRepository(Account);
-
-        let account = await accountRepo.findOneBy({
-            id: "default",
-        });
-
+    // If accounts are not enabled, check if default account exists
+    if (!accountsEnabled) {
+        // Check if default account exists, if not create one
+        let account = await dbGetAccountById("default");
         if (!account) {
             logger.log("info", "Default account does not exist, creating one");
 
-            account = new Account(
-                "default",
-                process.env.DEFAULT_ADMIN_API_KEY || "1234"
-            );
-            await accountRepo.save(account);
+            let newAccount: NewAccount = {
+                id: "default",
+                apiKey: process.env.DEFAULT_ADMIN_API_KEY || "1234",
+            };
+
+            let createdAccount = await dbCreateAccount(newAccount);
+            if (!createdAccount) {
+                logger.log("error", "Failed to create default account");
+                process.exit(1);
+            }
         }
     }
 
+    // Start the HTTP server
     initHTTPServer({ port: 3000 });
 }
 

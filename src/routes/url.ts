@@ -1,10 +1,18 @@
 import { customAlphabet } from "nanoid";
-import { Request, Response, RouteController } from "../httpserver";
-import { URL } from "../database/models/url";
-import { Account } from "../database/models/account";
-import { db } from "../database/source";
+import { RouteController } from "../http";
+import { NewURL, URL } from "../db/schema/urls";
 import { logger } from "..";
+import {
+    dbCreateUrl,
+    dbDeleteUrlById,
+    dbGetUrlByShortId,
+    dbGetUrlByShortIdAndAccountId,
+    dbUpdateUrlViewCountById,
+} from "../db/models/urls";
+import { dbGetAccountByApiKey } from "../db/models/accounts";
+import { Request, Response } from "express";
 
+// Change the alphabet to be more URL friendly, (could be BASE62)
 const nanoid = customAlphabet(
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
     12
@@ -48,27 +56,23 @@ const routesController: RouteController = {
             // Parse body
             let parsedBody: ShortenRequest = req.body;
 
-            // Check if the URL is valid
-            const urlRepository = db.getRepository(URL);
-
             let id;
             if (parsedBody.id) {
                 // Check with database if the id is already taken
                 // If it is, return an error
 
-                const url = await urlRepository.findOneBy({
-                    // @ts-ignore
-                    shortId: parsedBody.id,
-                });
-
+                // Fetch the url from the database
+                const url = await dbGetUrlByShortId(parsedBody.id);
                 if (url) {
                     logger.error("ID already taken");
                     res.status(409).send("Conflict");
                     return;
                 }
 
+                // Set the id to the id provided in the request
                 id = parsedBody.id;
             } else {
+                // Generate a new id
                 id = nanoid();
             }
 
@@ -78,13 +82,7 @@ const routesController: RouteController = {
                 return;
             }
 
-            // Check if the user has an account
-            const accountRepository = db.getRepository(Account);
-
-            let account = await accountRepository.findOneBy({
-                apiKey: token,
-            });
-
+            let account = await dbGetAccountByApiKey(token);
             if (!account) {
                 logger.error("Unauthorized");
                 res.status(401).send("Unauthorized");
@@ -92,8 +90,15 @@ const routesController: RouteController = {
             }
 
             // Create the URL
-            const url = new URL(parsedBody.url, id, 0, account);
-            const result = await urlRepository.insert(url);
+            const url: NewURL = {
+                shortId: id,
+                views: 0,
+                redirectURL: parsedBody.url,
+                accountId: account.id,
+            };
+
+            // Insert the URL into the database
+            const result = await dbCreateUrl(url);
             if (!result) {
                 logger.error("Internal Server Error");
                 res.status(500).send("Internal Server Error");
@@ -126,25 +131,15 @@ const routesController: RouteController = {
             }
 
             // Check if the user has an account
-            const accountRepository = db.getRepository(Account);
-
-            let account = await accountRepository.findOneBy({
-                apiKey: token,
-            });
-
+            let account = await dbGetAccountByApiKey(token);
             if (!account) {
                 logger.error("Unauthorized");
                 res.status(401).send("Unauthorized");
                 return;
             }
 
-            const urlRepository = db.getRepository(URL);
-
-            const url = await urlRepository.findOneBy({
-                shortId: id,
-                account: { id: account.id },
-            });
-
+            // Fetch the url from the database
+            const url = await dbGetUrlByShortIdAndAccountId(id, account.id);
             if (!url) {
                 logger.error("URL to get stats for was not Found");
                 res.status(404).send("Not Found");
@@ -177,12 +172,7 @@ const routesController: RouteController = {
             }
 
             // Check if the user has an account
-            const accountRepository = db.getRepository(Account);
-
-            let account = await accountRepository.findOneBy({
-                apiKey: token,
-            });
-
+            let account = await dbGetAccountByApiKey(token);
             if (!account) {
                 logger.error("Unauthorized");
                 res.status(401).send("Unauthorized");
@@ -191,20 +181,16 @@ const routesController: RouteController = {
 
             logger.info(`Looking for url with ${id} to delete...`);
 
-            const urlRepository = db.getRepository(URL);
-
-            const url = await urlRepository.findOneBy({
-                shortId: id,
-                account: { id: account.id },
-            });
-
+            // Fetch the url from the database
+            const url = await dbGetUrlByShortIdAndAccountId(id, account.id);
             if (!url) {
                 logger.error("URL to delete was not Found");
                 res.status(404).send("Not Found");
                 return;
             }
 
-            let result = await urlRepository.remove(url);
+            // Delete the url from the database
+            let result = await dbDeleteUrlById(url.id);
             if (!result) {
                 logger.error("Internal Server Error");
                 res.status(500).send("Internal Server Error");
@@ -223,13 +209,8 @@ const routesController: RouteController = {
 
             logger.info(`Looking for url with ${id}`);
 
-            const urlRepository = db.getRepository(URL);
-
-            const url = await urlRepository.findOneBy({
-                // @ts-ignore
-                shortId: id,
-            });
-
+            // Fetch the url from the database
+            const url = await dbGetUrlByShortId(id);
             if (!url) {
                 logger.error("Not Found");
                 res.status(404).send("Not Found");
@@ -238,9 +219,18 @@ const routesController: RouteController = {
 
             logger.info(`Found url with ${id}, redirecting user...`);
 
+            // Update the view count
             url.views++;
 
-            await urlRepository.save(url);
+            const updateResult = await dbUpdateUrlViewCountById(
+                url.id,
+                url.views
+            );
+            if (!updateResult) {
+                logger.error("Internal Server Error when updating view count");
+                res.status(500).send("Internal Server Error");
+                return;
+            }
 
             res.redirect(url.redirectURL);
         });
